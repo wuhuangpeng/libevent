@@ -1027,8 +1027,8 @@ macro(add_sample_prog ssl name)
                           ${LIB_APPS}
                           ${LIB_PLATFORM})
 
-    if (${ssl})
-        target_link_libraries(${name} event_openssl)
+    if (TARGET ${ssl})
+        target_link_libraries(${name} ${ssl})
         if(WIN32)
             target_link_libraries(${name} crypt32)
         endif()
@@ -1047,12 +1047,17 @@ if (NOT EVENT__DISABLE_SAMPLES)
     endforeach()
 
     if (NOT EVENT__DISABLE_OPENSSL)
-        add_sample_prog(ON https-client
+        add_sample_prog(event_openssl https-client
                         sample/https-client.c
                         sample/openssl_hostname_validation.c
                         sample/hostcheck.c)
-        add_sample_prog(ON le-proxy
+        add_sample_prog(event_openssl le-proxy
                         sample/le-proxy.c)
+    endif()
+
+    if (NOT EVENT__DISABLE_MBEDTLS)
+        add_sample_prog(event_mbedtls ssl_client1
+                sample/ssl_client1.c)
     endif()
 
     set(SAMPLES_WOPT

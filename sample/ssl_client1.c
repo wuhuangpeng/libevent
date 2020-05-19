@@ -63,6 +63,7 @@ int main( void )
 #include <string.h>
 
 #include <event2/event.h>
+#include <event2/dns.h>
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/util.h>
@@ -83,12 +84,12 @@ static void my_debug( void *ctx, int level,
     fflush(  (FILE *) ctx  );
 }
 
-void writecb(struct bufferevent *bev, void *arg)
+static void writecb(struct bufferevent *bev, void *arg)
 {
         fprintf(stderr, "writecb\n");
 }
 
-void readcb(struct bufferevent *bev, void *arg)
+static void readcb(struct bufferevent *bev, void *arg)
 {
 	char buf[1000] = {};
 	size_t r = 0;
@@ -96,7 +97,7 @@ void readcb(struct bufferevent *bev, void *arg)
 	for (i=0; i<10; ++i)
 {
 	r = bufferevent_read(bev, buf, 800);
-		fprintf(stderr, "readcb %d\n\n", r);
+		fprintf(stderr, "readcb %zu\n\n", r);
 		if (r > 1) {
 			fwrite(buf, 1, r, stdout);
 			fwrite("\n", 1, r, stdout);
@@ -105,7 +106,7 @@ void readcb(struct bufferevent *bev, void *arg)
 	}
 }
 
-void eventcb(struct bufferevent *bev, short what, void *arg)
+static void eventcb(struct bufferevent *bev, short what, void *arg)
 {
 	fprintf(stderr, "\n---------------eventcb %d\n", what);
 	if (what & BEV_EVENT_CONNECTED) {
@@ -128,10 +129,8 @@ void eventcb(struct bufferevent *bev, short what, void *arg)
 
 int main( void )
 {
-    int ret, len;
+    int ret;
     mbedtls_net_context server_fd;
-    uint32_t flags;
-    unsigned char buf[1024];
     const char *pers = "ssl_client1";
 
     mbedtls_entropy_context entropy;
@@ -140,9 +139,10 @@ int main( void )
     mbedtls_ssl_config conf;
     mbedtls_x509_crt cacert;
 
-    struct event *ev_sigterm;
     struct event_base  *evbase;
     struct evdns_base *evdns;
+	struct bufferevent *bev;
+	struct bufferevent *bevf;
 
 #ifdef WIN32
     WORD wVersionRequested;
@@ -262,8 +262,8 @@ int main( void )
 
 
 #if 1
-struct bufferevent *bev = bufferevent_socket_new(evbase, server_fd.fd, BEV_OPT_CLOSE_ON_FREE);
-struct bufferevent *bevf = bufferevent_mbedtls_filter_new(
+	bev = bufferevent_socket_new(evbase, server_fd.fd, BEV_OPT_CLOSE_ON_FREE);
+	bevf = bufferevent_mbedtls_filter_new(
 	evbase, bev, &ssl, 
 	BUFFEREVENT_SSL_CONNECTING, BEV_OPT_CLOSE_ON_FREE);
        bev = bevf;
@@ -273,7 +273,7 @@ struct bufferevent *bev = bufferevent_mbedtls_socket_new(
 	evbase, server_fd.fd, &ssl, 
 	BUFFEREVENT_SSL_CONNECTING, BEV_OPT_CLOSE_ON_FREE);
 #endif
-    bufferevent_setcb(bev, readcb, NULL, eventcb, NULL);
+    bufferevent_setcb(bev, readcb, writecb, eventcb, NULL);
 
     bufferevent_enable(bev, EV_READ);
 

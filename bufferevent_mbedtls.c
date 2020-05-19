@@ -168,7 +168,7 @@ bio_bufferevent_write(void *ctx, const unsigned char *in, size_t inlen)
 
 	EVUTIL_ASSERT(inlen > 0);
 	evbuffer_add(output, in, inlen);
-	fprintf(stderr, "bio write %d bytes\n", inlen);
+	fprintf(stderr, "bio write %zu bytes\n", inlen);
 	return inlen;
 }
 
@@ -407,7 +407,6 @@ conn_closed(struct bufferevent_mbedtls *bev_ssl, int when, int errcode, int ret)
 {
 	int event = BEV_EVENT_ERROR;
 	//int dirty_shutdown = 0;
-	unsigned long err;
 	char buf[100] = {};
 
 	fprintf(stderr, "when %d error code %d", when, errcode);
@@ -459,7 +458,7 @@ decrement_buckets(struct bufferevent_mbedtls *bev_ssl)
 {
 	unsigned long num_w = BIO_number_written(SSL_get_wbio(bev_ssl->ssl));
 	unsigned long num_r = BIO_number_read(SSL_get_rbio(bev_ssl->ssl));
-	/* These next two subtractions can wrap around. That's okay. * /
+	/ * These next two subtractions can wrap around. That's okay. * /
 	unsigned long w = num_w - bev_ssl->counts.n_written;
 	unsigned long r = num_r - bev_ssl->counts.n_read;
 	if (w)
@@ -1340,10 +1339,6 @@ bufferevent_mbedtls_socket_new(struct event_base *base,
 	return bufferevent_mbedtls_new_impl(
 		base, NULL, fd, ssl, state, options);
 
-err:
-	if (options & BEV_OPT_CLOSE_ON_FREE)
-		mbedtls_ssl_free(ssl);
-	return NULL;
 }
 
 int
