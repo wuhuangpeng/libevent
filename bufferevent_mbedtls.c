@@ -407,7 +407,7 @@ conn_closed(struct bufferevent_mbedtls *bev_ssl, int when, int errcode, int ret)
 {
 	int event = BEV_EVENT_ERROR;
 	//int dirty_shutdown = 0;
-	char buf[100] = {};
+	char buf[100];
 
 	fprintf(stderr, "when %d error code %d", when, errcode);
 

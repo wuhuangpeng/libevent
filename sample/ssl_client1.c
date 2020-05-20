@@ -91,7 +91,7 @@ static void writecb(struct bufferevent *bev, void *arg)
 
 static void readcb(struct bufferevent *bev, void *arg)
 {
-	char buf[1000] = {};
+	char buf[1000];
 	size_t r = 0;
 	int i;
 	for (i=0; i<10; ++i)
