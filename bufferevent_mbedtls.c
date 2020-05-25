@@ -409,8 +409,6 @@ conn_closed(struct bufferevent_mbedtls *bev_ssl, int when, int errcode, int ret)
 	//int dirty_shutdown = 0;
 	char buf[100];
 
-	fprintf(stderr, "when %d error code %d", when, errcode);
-
 	if (when & BEV_EVENT_READING && ret == 0)
 	{ 
 		if (bev_ssl->allow_dirty_shutdown)
