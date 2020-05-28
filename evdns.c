@@ -559,7 +559,7 @@ request_swap_ns(struct request *req, struct nameserver *ns) {
 /* called when a nameserver has been deemed to have failed. For example, too */
 /* many packets have timed out etc */
 static void
-nameserver_failed(struct nameserver *const ns, const char *msg) {
+nameserver_failed(struct nameserver *const ns, const char *msg, int err) {
 	struct request *req, *started_at;
 	struct evdns_base *base = ns->base;
 	int i;
@@ -585,6 +585,36 @@ nameserver_failed(struct nameserver *const ns, const char *msg) {
 	ns->state = 0;
 	ns->failed_times = 1;
 
+	if (err == ENOTCONN) {
+		/* XXX: If recvfrom results in ENOTCONN, the socket remains readable
+		 * which triggers another recvfrom. The observed behavior is 100% CPU use.
+		 * This occurs on iOS (kqueue) after the process has been backgrounded
+		 * for a long time (~300 seconds) and then resumed.
+		 * All sockets, TCP and UDP, seem to get ENOTCONN and must be closed.
+		 * https://github.com/libevent/libevent/issues/265 */
+		const struct sockaddr *address = (const struct sockaddr *)&ns->address;
+		evutil_closesocket(ns->socket);
+		ns->socket = evutil_socket_(address->sa_family,
+			SOCK_DGRAM | EVUTIL_SOCK_NONBLOCK | EVUTIL_SOCK_CLOEXEC, 0);
+
+		if (base->global_outgoing_addrlen &&
+			!evutil_sockaddr_is_loopback_(address)) {
+			if (bind(ns->socket,
+					(struct sockaddr *)&base->global_outgoing_address,
+					base->global_outgoing_addrlen) < 0) {
+				log(EVDNS_LOG_WARN, "Couldn't bind to outgoing address");
+			}
+		}
+
+		event_del(&ns->event);
+		event_assign(&ns->event, ns->base->event_base, ns->socket,
+			EV_READ | (ns->write_waiting ? EV_WRITE : 0) | EV_PERSIST,
+			nameserver_ready_callback, ns);
+		if (!base->disable_when_inactive && event_add(&ns->event, NULL) < 0) {
+			log(EVDNS_LOG_WARN, "Couldn't add %s event",
+				ns->write_waiting ? "rw": "read");
+		}
+	}
 	if (evtimer_add(&ns->timeout_event,
 		&base->global_nameserver_probe_initial_timeout) < 0) {
 		log(EVDNS_LOG_WARN,
@@ -918,7 +948,7 @@ reply_handle(struct request *const req, u16 flags, u32 ttl, struct reply *reply)
 				char msg[64];
 				evutil_snprintf(msg, sizeof(msg), "Bad response %d (%s)",
 					 error, evdns_err_to_string(error));
-				nameserver_failed(req->ns, msg);
+				nameserver_failed(req->ns, msg, 0);
 				if (!request_reissue(req)) return;
 			}
 			break;
@@ -1399,7 +1429,7 @@ nameserver_read(struct nameserver *ns) {
 			if (EVUTIL_ERR_RW_RETRIABLE(err))
 				return;
 			nameserver_failed(ns,
-			    evutil_socket_error_to_string(err));
+			    evutil_socket_error_to_string(err), err);
 			return;
 		}
 		if (evutil_sockaddr_cmp((struct sockaddr*)&ss,
@@ -2192,7 +2222,7 @@ evdns_request_timeout_callback(evutil_socket_t fd, short events, void *arg) {
 		reply_schedule_callback(req, 0, DNS_ERR_TIMEOUT, NULL);
 
 		request_finished(req, &REQ_HEAD(req->base, req->trans_id), 1);
-		nameserver_failed(ns, "request timed out.");
+		nameserver_failed(ns, "request timed out.", 0);
 	} else {
 		/* retransmit it */
 		log(EVDNS_LOG_DEBUG, "Retransmitting request %p; tx_count==%d",
@@ -2204,7 +2234,7 @@ evdns_request_timeout_callback(evutil_socket_t fd, short events, void *arg) {
 		req->ns->timedout++;
 		if (req->ns->timedout > req->base->global_max_nameserver_timeout) {
 			req->ns->timedout = 0;
-			nameserver_failed(req->ns, "request timed out.");
+			nameserver_failed(req->ns, "request timed out.", 0);
 		}
 	}
 
@@ -2235,7 +2265,7 @@ evdns_request_transmit_to(struct request *req, struct nameserver *server) {
 		int err = evutil_socket_geterror(server->socket);
 		if (EVUTIL_ERR_RW_RETRIABLE(err))
 			return 1;
-		nameserver_failed(req->ns, evutil_socket_error_to_string(err));
+		nameserver_failed(req->ns, evutil_socket_error_to_string(err), err);
 		return 2;
 	} else if (r != (int)req->request_len) {
 		return 1;  /* short write */
