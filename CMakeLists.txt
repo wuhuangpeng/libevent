@@ -980,8 +980,10 @@ endif()
 
 if (NOT EVENT__DISABLE_MBEDTLS)
     add_event_library(event_mbedtls
-        LIBRARIES event_core_shared ${MBEDTLS_LIBRARIES}
-        SOURCES ${SRC_MBEDTLS})
+            INNER_LIBRARIES event_core
+            OUTER_INCLUDES ${MBEDTLS_INCLUDE_DIR}
+            LIBRARIES ${MBEDTLS_LIBRARIES}
+            SOURCES ${SRC_MBEDTLS})
 endif()
 
 if (EVENT__HAVE_PTHREADS)
